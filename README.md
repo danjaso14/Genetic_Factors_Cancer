@@ -30,11 +30,11 @@ risk of prostate cancer in African American men.
 
 Project Supervisors: 
 
-Dr. Patricia Francis-Lyon (MSHI USF Professor)
+Dr. Patricia Francis-Lyon (MSHI USF Professor) <br/>
 Dr. Robert Horton (SR. Data Scientist at Microsoft)
 
 Team members:
 
-Daniel Jaso
-Patrick Boada
+Daniel Jaso <br/>
+Patrick Boada <br/>
 Dashyanng Kachru
