@@ -1,0 +1,13 @@
+name: TRPV6
+title: TRPV6
+username:
+account: djaso14
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2338432
+bundleId: 3176617
+url: https://djaso14.shinyapps.io/TRPV6/
+when: 1590099258.37765
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: run_data_set.csv

@@ -1,0 +1,270 @@
+---
+title: "Untitled"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r, echo=FALSE, results='hide', warning=FALSE}
+options(warn=-1)
+suppressMessages(library(ggplot2))
+suppressMessages(library(corrplot)) 
+suppressMessages(library(imputeTS))
+suppressMessages(library(psych))
+suppressMessages(library(pscl))
+suppressMessages(library(plotly))
+library(caret)
+library(pROC)
+
+logisticPseudoR2s <- function(LogModel) { 
+  
+  dev <- LogModel$deviance 
+  nullDev <- LogModel$null.deviance 
+  modelN <-  length(LogModel$fitted.values)
+  R.l <-  1 -  dev / nullDev
+  R.cs <- 1- exp ( -(nullDev - dev) / modelN)
+  R.n <- R.cs / ( 1 - ( exp (-(nullDev / modelN))))
+  cat("Pseudo R^2 for logistic regression\n")
+  cat("Hosmer and Lemeshow R^2  ", round(R.l, 3), "\n")
+  cat("Cox and Snell R^2        ", round(R.cs, 3), "\n")
+  cat("Nagelkerke R^2           ", round(R.n, 3),    "\n")
+}
+
+```
+
+
+```{r, echo=FALSE}
+
+original_data <- read.csv('/Users/student1/Downloads/run_data_set.csv')
+
+```
+
+
+```{r}
+
+
+
+
+
+elas_top_10 <- c("gene_80781_COL18A1_rs11702425", "gene_105370531_LOC105370531_rs12147456",
+                 "gene_114793_FMNL2_rs4442949", "gene_100996941_IL21_AS1_rs2137497", 
+                 "gene_64067_NPAS3_rs7157155", "gene_56934_CA10_rs16950386",
+                 "gene_105370531_LOC105370531_rs7152965", "gene_284034_LINC00670_rs12150051",
+                 "gene_55503_TRPV6_rs4987667", "gene_6092_ROBO2_rs13087864") 
+
+
+
+
+
+
+# df <- original_data[,  (names(original_data) %in% c(features_250_good, "phenotype"))]
+df_Top10 <- original_data[,  (names(original_data) %in% c(elas_top_10, "phenotype"))]
+# df_Top10 <- cbind(df_Top10, original_data$phenotype)
+colnames(df_Top10)
+# df_Top10$phenotype <- ifelse(original_data$phenotype == "cancer", 1, 0)
+colnames(df_Top10)
+
+
+
+names(df_Top10) <- c("rs11702425", "rs12147456",
+                 "rs4442949", "rs2137497", 
+                 "rs7157155", "rs16950386",
+                 "rs7152965", "rs12150051",
+                 "rs4987667", "rs13087864", "phenotype")
+
+
+df <- df_Top10
+colnames(df)
+
+
+```
+
+
+```{r}
+
+dim(df)
+table(df$phenotype)
+p<-ggplot(df, aes(x=phenotype, fill=phenotype)) +
+  geom_bar(stat="count")+theme_minimal() +
+  ggtitle("Phenotype Distribution")
+p
+
+
+
+```
+
+```{r}
+
+df_numeric <- df
+df_numeric$phenotype <- as.numeric(ifelse(df_numeric$phenotype == "cancer", 1, 0))
+colnames(df_numeric)
+
+
+corrplot(cor(df_numeric[1:10], use = "pairwise.complete.obs"), type = "upper", title = "Top 10 SNPs From ElasticNet", mar=c(0,0,1,0))
+
+```
+
+
+
+
+
+```{r}
+# df <- new
+
+y <- df$phenotype
+x <- df[,  !(names(df) %in% c("phenotype"))]
+
+original_data_50thres <- x[, which(colMeans(!is.na(x)) > .5)]
+dim(original_data_50thres)
+
+
+```
+
+
+```{r}
+# Imputation by mode
+
+
+
+for (column in 1:length(original_data_50thres))
+{
+  original_data_50thres[, column] <- ifelse(is.na(original_data_50thres[,column]) == TRUE, 
+                         na_mean(original_data_50thres[,column],option = "mode"),
+                         original_data_50thres[,column])
+}
+
+dim(original_data_50thres)
+
+```
+
+
+```{r}
+## Elimininate columns that are highly correlated
+
+corr <- cor(original_data_50thres[,1:length(original_data_50thres)])
+highCorr <- findCorrelation(corr, cutoff = .99, names = T)
+clean_data <- original_data_50thres[, !names(original_data_50thres) %in% highCorr]
+dim(clean_data)
+# data_proc <- data.frame(cbind(clean_data, phenotype=y))
+# table(data_proc$phenotype)
+```
+
+
+
+
+
+## PCA with Varimax Rotation, Rotatated Components = 2
+```{r}
+y <- ifelse(y == "cancer", 1, 0)
+table(y)
+pca_varimax <- principal(clean_data, nfactors = 2, rotate = "varimax")
+rotation2 <- data.frame(cbind(pca_varimax$score, phenotype= y))
+pca_varimax$loadings
+# pca_varimax$Vaccounted
+
+
+
+```
+
+### PCR Modeling
+```{r}
+
+intrain <- createDataPartition(y = rotation2$phenotype, p= 0.7, list = FALSE)
+training <- rotation2[intrain,]
+testing <- rotation2[-intrain,]
+dim(training); dim(testing)
+
+table(training$phenotype) ; table(testing$phenotype)
+
+training$phenotype <- as.factor(training$phenotype)
+testing$phenotype <- as.factor(testing$phenotype)
+
+levels(training$phenotype) <- c("F", "T")
+levels(testing$phenotype) <- c("F", "T")
+
+
+
+
+trctrl <- trainControl(summaryFunction=twoClassSummary,classProbs = TRUE,# Use AUC to pick the best model
+                       savePredictions = T, method = "cv", number = 3)
+
+
+log_mod <- train(form = phenotype ~ .,
+                          data = training,
+                          trControl = trctrl,
+                          method = "glm",
+                          metric ="ROC",
+                          family = "binomial")
+
+# log_mod <- glm(as.factor(phenotype) ~ ., data = rotation2, family = "binomial")
+r <- summary(log_mod)
+r
+
+```
+
+
+
+
+
+
+```{r}
+
+
+logisticPseudoR2s(r)
+
+```
+
+
+### PCR Confusion Matrix
+```{r, echo= FALSE}
+pred_log <- predict(log_mod, testing)
+# pR2(log_mod)[4]
+
+# length(testing$phenotype); length(pred_log)
+
+confusionMatrix(testing$phenotype,  pred_log, positive="T")
+```
+
+### PRC ROC Curve
+```{r, echo=FALSE, include=FALSE}
+logROC <- roc(testing$phenotype, predict(log_mod, testing, type = "prob")[, "T"])
+
+```
+
+
+```{r, echo=FALSE}
+plot.roc(logROC, print.auc=TRUE, legacy.axes=TRUE)  
+
+```
+
+
+
+### PCA with 2 Rotated Components Plot
+```{r}
+ggplot(rotation2, aes(x = RC1, y = RC2)) +
+  geom_point(aes(colour = as.factor(phenotype)), show.legend = TRUE) +
+  scale_color_manual(name="Phenotype",
+                       labels=c("Control","Cancer"),
+                       values=c("blue","red")) +
+   ggtitle("2 Rotated Components Over Top 10 Rsid")
+```
+
+
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
