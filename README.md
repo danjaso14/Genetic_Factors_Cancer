@@ -1,7 +1,5 @@
 # Investigation of Genetic Factors in African American Cancer Disparities
 
-Interactive Viz:
-https://public.tableau.com/profile/daniel.jaso2366#!/vizhome/TRPV6/Viz_1
 
 Abstract:
 
